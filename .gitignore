@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.streamlit/
+.env
+.claude
+backend/db/artifacts/
+backend/db/uploads/

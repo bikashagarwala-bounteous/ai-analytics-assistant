@@ -1,0 +1,45 @@
+# Backend — FastAPI + LangGraph
+
+# Web framework
+fastapi
+uvicorn[standard]
+
+# LangGraph — agent pipeline
+langgraph
+langchain-core
+
+# Google Gemini
+google-genai
+
+# Database
+asyncpg
+sqlalchemy[asyncio]
+
+# Redis
+redis[asyncio]
+hiredis
+
+# ChromaDB (for the log indexer background task)
+chromadb==0.5.20
+
+# MCP SDK client
+mcp[cli]
+
+# HTTP client
+httpx
+
+# Validation
+pydantic
+pydantic-settings
+
+# Serialisation
+orjson
+
+# LangSmith
+langsmith
+
+# Logging
+structlog
+
+# Utilities
+python-dotenv

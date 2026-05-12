@@ -1,0 +1,189 @@
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  analytics_net:
+    driver: bridge
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  chromadb_data:
+
+# ═══════════════════════════════════════════════════════════════════════════════
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: analytics_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-analytics_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/migrations/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - analytics_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-analytics_user} -d ${POSTGRES_DB:-analytics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: analytics_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - analytics_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── ChromaDB ─────────────────────────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    container_name: analytics_chromadb
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /chroma/chroma
+      ANONYMIZED_TELEMETRY: "FALSE"
+      ALLOW_RESET: "FALSE"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    ports:
+      - "8000:8000"
+    networks:
+      - analytics_net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── MCP Server (standalone — can be scaled independently) ────────────────────
+  mcp_server:
+    build:
+      context: ./mcp_server
+      dockerfile: Dockerfile
+    container_name: analytics_mcp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8001
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      CHROMADB_HOST: chromadb
+    ports:
+      - "8001:8001"
+    networks:
+      - analytics_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  # ── Backend FastAPI ───────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: analytics_backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      CHROMADB_HOST: chromadb
+      MCP_SERVER_URL: http://mcp_server:8001/mcp
+    ports:
+      - "8080:8080"
+    networks:
+      - analytics_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      mcp_server:
+        condition: service_healthy
+  # ── Streamlit Frontend ──────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: analytics_frontend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BACKEND_URL: http://backend:8080
+    ports:
+      - "8501:8501"
+    networks:
+      - analytics_net
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── Background Indexer ────────────────────────────────────────────────────────
+  indexer:
+    build:
+      context: ./indexer
+      dockerfile: Dockerfile
+    container_name: analytics_indexer
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      CHROMADB_HOST: chromadb
+    networks:
+      - analytics_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M

@@ -1,0 +1,11 @@
+google-genai
+redis[asyncio]
+hiredis
+asyncpg
+sqlalchemy[asyncio]
+chromadb==0.5.20
+pydantic
+pydantic-settings
+structlog
+python-dotenv
+httpx

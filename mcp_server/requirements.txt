@@ -1,0 +1,52 @@
+# MCP Server Dependencies
+mcp[cli]
+
+# Google Gemini SDK
+google-genai
+
+# Database
+asyncpg
+sqlalchemy[asyncio]
+psycopg2-binary
+
+# Redis
+redis[asyncio]
+hiredis
+
+# Vector Store
+chromadb==0.5.20
+
+# Data & ML
+numpy
+pandas
+scipy
+scikit-learn
+prophet
+
+# Validation
+pydantic
+pydantic-settings
+
+# Retry & Resilience
+tenacity
+
+# Server
+uvicorn[standard]
+starlette
+
+# LangSmith — observability, tracing, prompt management
+langsmith
+
+# Guardrails & PII detection (Microsoft Presidio)
+presidio-analyzer
+presidio-anonymizer
+
+# Token counting (for rate limiter accuracy)
+tiktoken
+
+# Logging
+structlog
+
+# Utilities
+python-dotenv
+httpx
